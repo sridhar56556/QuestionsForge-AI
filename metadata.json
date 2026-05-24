@@ -1,0 +1,6 @@
+{
+  "name": "VedaAI",
+  "description": "Intelligent AI assessment creator and beautiful PDF generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
