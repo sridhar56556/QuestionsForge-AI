@@ -208,6 +208,25 @@ const LOCAL_QUESTION_BANK: Record<string, { text: string; type: string; options?
   ]
 };
 
+function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function shuffleMCQOptions(options: string[]): string[] {
+  const cleaned = options.map(opt => opt.replace(/^[A-D]\.\s*/i, ''));
+  const shuffled = shuffleArray(cleaned);
+  const prefixes = ["A", "B", "C", "D"];
+  return shuffled.map((opt, idx) => {
+    const prefix = prefixes[idx % prefixes.length];
+    return `${prefix}. ${opt}`;
+  });
+}
+
 function generateLocalMockPaper(assignment: any): any {
   const numQuestions = assignment.numberOfQuestions || 5;
   const totalMarks = assignment.totalMarks || 50;
@@ -219,7 +238,6 @@ function generateLocalMockPaper(assignment: any): any {
   
   let sourceQuestions = LOCAL_QUESTION_BANK[subject] || [];
   if (sourceQuestions.length === 0) {
-    // Dynamically build a rich set of fallback questions for custom/other subjects
     const subLabel = assignment.subject || "this topic";
     sourceQuestions = [
       { text: `What is a primary element or foundation of ${subLabel}?`, type: "MCQ", options: [`A. Core theory of ${subLabel}`, "B. Irrelevant alternative B", "C. General theory C", "D. None of the above"] },
@@ -232,23 +250,24 @@ function generateLocalMockPaper(assignment: any): any {
     ];
   }
 
-  // Filter questions based on requested types
   let filteredQuestions = sourceQuestions.filter(q => questionTypes.includes(q.type));
   if (filteredQuestions.length === 0) {
-    filteredQuestions = sourceQuestions; // fallback if no types match
+    filteredQuestions = sourceQuestions;
   }
+
+  // Shuffle pool to ensure different questions on every generation
+  const shuffledPool = shuffleArray(filteredQuestions);
 
   const selectedQuestions: any[] = [];
   const marksPerQuestion = Math.max(1, Math.floor(totalMarks / numQuestions));
   const remainingMarks = totalMarks - (marksPerQuestion * numQuestions);
 
   for (let i = 0; i < numQuestions; i++) {
-    let baseQuestion = filteredQuestions[i % filteredQuestions.length];
+    let baseQuestion = shuffledPool[i % shuffledPool.length];
     
-    // If we have to reuse questions, customize the text to make it unique
     let text = baseQuestion.text;
-    if (i >= filteredQuestions.length) {
-      const copyNum = Math.floor(i / filteredQuestions.length) + 1;
+    if (i >= shuffledPool.length) {
+      const copyNum = Math.floor(i / shuffledPool.length) + 1;
       text = text.replace("?", ` (Part ${copyNum})?`);
       if (!text.endsWith("?")) {
         text += ` (Part ${copyNum})`;
@@ -257,25 +276,27 @@ function generateLocalMockPaper(assignment: any): any {
 
     const qMarks = i === numQuestions - 1 ? (marksPerQuestion + remainingMarks) : marksPerQuestion;
 
+    let options = baseQuestion.options ? [...baseQuestion.options] : undefined;
+    if (baseQuestion.type === "MCQ" && options) {
+      options = shuffleMCQOptions(options);
+    }
+
     selectedQuestions.push({
       number: i + 1,
       text,
       type: baseQuestion.type,
       difficulty: assignment.difficulty || "medium",
       marks: qMarks,
-      options: baseQuestion.options ? [...baseQuestion.options] : undefined
+      options
     });
   }
 
-  // Separate into Section A (Objective) and Section B (Subjective)
-  // Section A contains MCQ & True/False. Section B contains Short & Long Answers.
   const sectionAQuestions = selectedQuestions.filter(q => q.type === "MCQ" || q.type === "True/False");
   const sectionBQuestions = selectedQuestions.filter(q => q.type !== "MCQ" && q.type !== "True/False");
 
   const sections: any[] = [];
 
   if (sectionAQuestions.length > 0) {
-    // Re-number questions in Section A sequentially
     sections.push({
       title: "Section A (Objective Type Questions)",
       instruction: "Attempt all questions. Choose the correct option or write True/False.",
@@ -291,7 +312,6 @@ function generateLocalMockPaper(assignment: any): any {
     });
   }
 
-  // Re-number all questions sequentially across sections to ensure chronological index
   let qNum = 1;
   for (const s of sections) {
     for (const q of s.questions) {
